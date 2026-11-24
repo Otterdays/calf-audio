@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CALF — Compact Audio Listening Format (.calf)</title>
+  <style>
+    :root {
+      --bg: #0b0d12;
+      --panel: #131722;
+      --panel-2: #1a2030;
+      --border: #262f45;
+      --text: #e8edf7;
+      --muted: #8b97b3;
+      --accent: #6c8cff;
+      --accent-2: #38e8b0;
+      --danger: #ff6b7a;
+      --radius: 12px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      line-height: 1.5;
+      padding: 28px 18px 60px;
+    }
+    .wrap {
+      max-width: 780px;
+      margin: 0 auto;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.55rem;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .badge {
+      font-size: 0.72rem;
+      font-family: var(--mono);
+      background: rgba(56, 232, 176, 0.14);
+      color: var(--accent-2);
+      border: 1px solid rgba(56, 232, 176, 0.35);
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 0.88rem;
+      margin-top: 4px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin: 0 0 12px;
+      font-weight: 600;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    input[type="text"], input[type="url"], select {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 0.92rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]:focus, input[type="url"]:focus, select:focus {
+      border-color: var(--accent);
+    }
+    .grow { flex: 1 1 260px; }
+    .mono { font-family: var(--mono); font-size: 0.85rem; }
+    button {
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+    }
+    button:hover { border-color: var(--accent); }
+    button.primary {
+      background: linear-gradient(135deg, #5c7cff, #38c9a8);
+      border: none;
+      color: #071018;
+    }
+    button.primary:hover { opacity: 0.92; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .presets {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .pill {
+      font-size: 0.76rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+    .pill:hover { color: var(--text); border-color: var(--accent); }
+    .hint {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+    .check-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    label.chk {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 0.84rem;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .status {
+      margin-top: 12px;
+      font-size: 0.86rem;
+      padding: 10px 12px;
+      border-radius: 8px;
+      display: none;
+    }
+    .status.show { display: block; }
+    .status.info { background: rgba(108, 140, 255, 0.12); border: 1px solid rgba(108, 140, 255, 0.35); color: #bcd0ff; }
+    .status.ok { background: rgba(56, 232, 176, 0.12); border: 1px solid rgba(56, 232, 176, 0.35); color: #9cf5d8; }
+    .status.err { background: rgba(255, 107, 122, 0.12); border: 1px solid rgba(255, 107, 122, 0.35); color: #ffb3bc; }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .metric {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .metric .k { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .metric .v { font-size: 1.15rem; font-weight: 700; font-family: var(--mono); margin-top: 2px; }
+    .metric .v.good { color: var(--accent-2); }
+
+    .file-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .file-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .file-meta {
+      min-width: 0;
+    }
+    .file-name {
+      font-weight: 600;
+      font-size: 0.9rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .file-sub {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+    .player-bar {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      display: none;
+    }
+    .player-bar.show { display: block; }
+    audio { width: 100%; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Compact Audio Listening Format <span class="badge">.CALF v1</span></h1>
+        <div class="sub">Psychoacoustic MDCT + Intensity Stereo + Harmonic Bandwidth Extension + 32-bit rANS</div>
+      </div>
+      <a href="/about" style="color:var(--accent-2); font-size:0.84rem; font-weight:600; text-decoration:none; white-space:nowrap;">About .CALF →</a>
+    </header>
+
+    <!-- Output Location Control -->
+    <div class="card">
+      <div class="card-title">Output Location</div>
+      <div class="row">
+        <input id="outDir" class="grow mono" type="text" placeholder="/path/to/output/folder" />
+        <button id="browseBtn" type="button">Browse…</button>
+        <button id="saveDirBtn" type="button">Save Path</button>
+      </div>
+      <div class="presets" id="presets"></div>
+      <div id="dirMsg" class="hint"></div>
+    </div>
+
+    <!-- YouTube to CALF Converter -->
+    <div class="card">
+      <div class="card-title">Convert YouTube URL to .CALF</div>
+      <div class="row">
+        <input id="ytUrl" class="grow" type="url" placeholder="https://www.youtube.com/watch?v=..." />
+        <select id="profile" title="Compression profile">
+          <option value="ultra">Ultra-Light (~35–48 kbps)</option>
+          <option value="balanced" selected>Balanced (~48–64 kbps)</option>
+          <option value="studio">Studio (~65–90 kbps)</option>
+        </select>
+        <button id="convertBtn" class="primary" type="button">Convert</button>
+      </div>
+      <div class="check-row">
+        <label class="chk">
+          <input id="alsoMp3" type="checkbox" />
+          Also save 128k MP3 side-by-side for A/B comparison
+        </label>
+        <button id="demoBtn" type="button">Run 8s Synth Test</button>
+      </div>
+      <div id="status" class="status"></div>
+      <div id="metrics" class="metrics" style="display:none;"></div>
+    </div>
+
+    <!-- Output Library & Built-in CALF Player -->
+    <div class="card">
+      <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+        <div class="card-title" style="margin:0;">Saved .CALF Files</div>
+        <button id="refreshBtn" type="button" style="padding:5px 10px; font-size:0.78rem;">Refresh</button>
+      </div>
+      <div id="fileList" class="file-list">
+        <div class="hint">Loading...</div>
+      </div>
+      <div id="playerBar" class="player-bar">
+        <div class="hint" id="nowPlaying"></div>
+        <audio id="audioEl" controls></audio>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function fmtBytes(b) {
+      if (b < 1024) return b + ' B';
+      if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+      return (b / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+    function fmtDur(s) {
+      const m = Math.floor(s / 60);
+      const r = Math.floor(s % 60);
+      return `${m}:${String(r).padStart(2, '0')}`;
+    }
+
+    function setStatus(kind, msg) {
+      const el = $('status');
+      el.className = 'status show ' + kind;
+      el.textContent = msg;
+    }
+
+    function renderMetrics(r) {
+      const m = $('metrics');
+      m.style.display = 'grid';
+      m.innerHTML = `
+        <div class="metric">
+          <div class="k">.CALF Size</div>
+          <div class="v good">${fmtBytes(r.calf_bytes)}</div>
+        </div>
+        <div class="metric">
+          <div class="k">Bitrate</div>
+          <div class="v">${r.calf_kbps.toFixed(1)} kbps</div>
+        </div>
+        <div class="metric">
+          <div class="k">vs 128k MP3</div>
+          <div class="v good">-${r.savings_vs_mp3_128_pct}%</div>
+        </div>
+        <div class="metric">
+          <div class="k">vs 192k MP3</div>
+          <div class="v good">-${r.savings_vs_mp3_192_pct}%</div>
+        </div>
+        <div class="metric">
+          <div class="k">vs Raw WAV</div>
+          <div class="v">${r.ratio_vs_wav}x smaller</div>
+        </div>
+        <div class="metric">
+          <div class="k">Encode Time</div>
+          <div class="v">${r.encode_ms.toFixed(0)} ms</div>
+        </div>
+      `;
+    }
+
+    async function loadConfig() {
+      const res = await fetch('/api/config');
+      const data = await res.json();
+      $('outDir').value = data.config.output_dir;
+      const pWrap = $('presets');
+      pWrap.innerHTML = '<span class="hint" style="margin:0 4px 0 0;">Quick paths:</span>';
+      for (const p of data.presets) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'pill';
+        btn.textContent = p.label;
+        btn.onclick = () => { $('outDir').value = p.path; saveDir(); };
+        pWrap.appendChild(btn);
+      }
+    }
+
+    async function saveDir() {
+      const output_dir = $('outDir').value.trim();
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ output_dir })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        $('outDir').value = data.config.output_dir;
+        $('dirMsg').textContent = 'Output folder saved: ' + data.config.output_dir;
+        loadFiles();
+      } else {
+        $('dirMsg').textContent = 'Error: ' + (data.error || 'Could not save path');
+      }
+    }
+
+    async function loadFiles() {
+      const res = await fetch('/api/files');
+      const data = await res.json();
+      const list = $('fileList');
+      if (!data.files.length) {
+        list.innerHTML = `<div class="hint">No .calf files in <span class="mono">${data.output_dir}</span> yet. Paste a YouTube URL or click "Run 8s Synth Test".</div>`;
+        return;
+      }
+      list.innerHTML = '';
+      for (const f of data.files) {
+        const row = document.createElement('div');
+        row.className = 'file-item';
+        row.innerHTML = `
+          <div class="file-meta">
+            <div class="file-name">${f.filename}</div>
+            <div class="file-sub">${fmtBytes(f.bytes)} · ${f.bitrate_kbps.toFixed(1)} kbps · ${fmtDur(f.duration_secs)} · ${f.profile}</div>
+          </div>
+          <button type="button">▶ Play</button>
+        `;
+        row.querySelector('button').onclick = () => playFile(f.filename);
+        list.appendChild(row);
+      }
+    }
+
+    function playFile(filename) {
+      $('playerBar').classList.add('show');
+      $('nowPlaying').textContent = 'Decoding on-the-fly via calf-codec: ' + filename;
+      const audio = $('audioEl');
+      audio.src = '/api/play?file=' + encodeURIComponent(filename) + '&t=' + Date.now();
+      audio.play().catch(() => {});
+    }
+
+    $('saveDirBtn').onclick = saveDir;
+    $('browseBtn').onclick = async () => {
+      $('browseBtn').disabled = true;
+      $('dirMsg').textContent = 'Opening folder picker...';
+      try {
+        const res = await fetch('/api/browse', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const data = await res.json();
+        if (data.ok && data.selected) {
+          $('outDir').value = data.selected;
+          $('dirMsg').textContent = 'Selected: ' + data.selected;
+          loadFiles();
+        } else {
+          $('dirMsg').textContent = 'No folder selected (you can also type or paste any path above).';
+        }
+      } finally {
+        $('browseBtn').disabled = false;
+      }
+    };
+
+    $('convertBtn').onclick = async () => {
+      const url = $('ytUrl').value.trim();
+      if (!url) { setStatus('err', 'Please paste a YouTube URL first.'); return; }
+      $('convertBtn').disabled = true;
+      $('demoBtn').disabled = true;
+      $('metrics').style.display = 'none';
+      setStatus('info', 'Downloading audio via yt-dlp, decoding PCM, and compressing with CALF v1...');
+      try {
+        const res = await fetch('/api/convert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url,
+            profile: $('profile').value,
+            output_dir: $('outDir').value.trim(),
+            also_mp3: $('alsoMp3').checked
+          })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          setStatus('err', data.error || 'Conversion failed.');
+          return;
+        }
+        const r = data.result;
+        setStatus('ok', `Saved: ${r.saved_path}`);
+        renderMetrics(r);
+        loadFiles();
+        playFile(r.filename);
+      } catch (e) {
+        setStatus('err', 'Request failed: ' + e.message);
+      } finally {
+        $('convertBtn').disabled = false;
+        $('demoBtn').disabled = false;
+      }
+    };
+
+    $('demoBtn').onclick = async () => {
+      $('demoBtn').disabled = true;
+      setStatus('info', 'Generating 8s stereo musical test signal and encoding with CALF v1...');
+      try {
+        const res = await fetch('/api/demo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profile: $('profile').value })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          setStatus('err', data.error || 'Demo failed.');
+          return;
+        }
+        const r = data.result;
+        setStatus('ok', `Demo saved: ${r.saved_path}`);
+        renderMetrics(r);
+        loadFiles();
+        playFile(r.filename);
+      } finally {
+        $('demoBtn').disabled = false;
+      }
+    };
+
+    $('refreshBtn').onclick = loadFiles;
+
+    loadConfig().then(loadFiles);
+  </script>
+</body>
+</html>

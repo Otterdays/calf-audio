@@ -1,0 +1,14 @@
+# Python / uv
+__pycache__/
+*.py[oc]
+.venv/
+
+# Rust build artifacts
+codec/target/
+
+# Local user config & generated audio
+config.json
+output/
+*.calf
+*.wav
+*.mp3

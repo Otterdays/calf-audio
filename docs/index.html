@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CALF (.calf) — Compact Audio Listening Format</title>
+  <style>
+    :root {
+      --fg: var(--foreground, #f1f5ff);
+      --muted-fg: var(--muted-foreground, #8e9bb8);
+      --surface: var(--card, #111622);
+      --surface-2: var(--secondary, #182032);
+      --line: var(--border, #25304a);
+      --blue: var(--chart-1, #5e81ff);
+      --mint: var(--chart-2, #34e8b2);
+      --amber: var(--chart-3, #f59e0b);
+      --rose: var(--chart-4, #f472b6);
+      --r: var(--radius, 14px);
+      --sans: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif);
+      --mono: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--background, #0b0d12);
+      color: var(--fg);
+      font-family: var(--sans);
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .site {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 8px 6px 40px;
+    }
+
+    /* Top Nav */
+    .nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      margin-bottom: 18px;
+      border-radius: var(--r);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-weight: 800;
+      font-size: 1rem;
+      letter-spacing: -0.02em;
+    }
+    .logo-mark {
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
+      background: linear-gradient(135deg, var(--blue), var(--mint));
+      display: grid;
+      place-items: center;
+      color: #071018;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+    .nav-links {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      font-size: 0.84rem;
+    }
+    .nav-links a {
+      color: var(--muted-fg);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .nav-links a:hover { color: var(--fg); }
+    .nav-cta {
+      background: linear-gradient(135deg, var(--blue), var(--mint));
+      color: #071018 !important;
+      padding: 6px 13px;
+      border-radius: 8px;
+      font-weight: 700 !important;
+    }
+
+    /* Hero */
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 36px 28px 30px;
+      border-radius: var(--r);
+      border: 1px solid var(--line);
+      background:
+        radial-gradient(640px 280px at 90% -10%, rgba(52, 232, 178, 0.18), transparent 68%),
+        radial-gradient(520px 260px at 0% 10%, rgba(94, 129, 255, 0.2), transparent 68%),
+        var(--surface);
+      margin-bottom: 18px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--mint);
+      background: rgba(52, 232, 178, 0.12);
+      border: 1px solid rgba(52, 232, 178, 0.34);
+      margin-bottom: 16px;
+    }
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(2rem, 5vw, 3rem);
+      line-height: 1.06;
+      letter-spacing: -0.035em;
+      max-width: 660px;
+    }
+    .grad {
+      background: linear-gradient(115deg, var(--blue), var(--mint));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .hero p {
+      color: var(--muted-fg);
+      font-size: 1.02rem;
+      max-width: 590px;
+      margin: 14px 0 22px;
+    }
+    .cta-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 11px 18px;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      border: 1px solid var(--line);
+      background: var(--surface-2);
+      color: var(--fg);
+    }
+    .btn.primary {
+      background: linear-gradient(135deg, var(--blue), var(--mint));
+      color: #061018;
+      border: none;
+    }
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+      gap: 10px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+    }
+    .stat .big {
+      font-family: var(--mono);
+      font-size: 1.38rem;
+      font-weight: 800;
+      color: var(--mint);
+    }
+    .stat .small {
+      font-size: 0.78rem;
+      color: var(--muted-fg);
+    }
+
+    /* Section */
+    .sec {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r);
+      padding: 24px 24px;
+      margin-bottom: 18px;
+    }
+    .sec-eyebrow {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--blue);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .sec h2 {
+      margin: 0;
+      font-size: 1.35rem;
+      letter-spacing: -0.02em;
+    }
+    .sec-lead {
+      margin: 6px 0 18px;
+      color: var(--muted-fg);
+      font-size: 0.9rem;
+    }
+
+    /* Era comparison cards */
+    .era-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+    .era {
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .era.winner {
+      border-color: rgba(52, 232, 178, 0.55);
+      background: linear-gradient(180deg, rgba(52, 232, 178, 0.09), var(--surface-2));
+    }
+    .era-yr {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--muted-fg);
+    }
+    .era.winner .era-yr { color: var(--mint); font-weight: 700; }
+    .era h3 { margin: 4px 0 8px; font-size: 1.05rem; }
+    .era ul {
+      margin: 0;
+      padding-left: 16px;
+      color: var(--muted-fg);
+      font-size: 0.82rem;
+    }
+    .era li { margin-bottom: 5px; }
+
+    /* Interactive Calculator */
+    .calc-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .tabs {
+      display: inline-flex;
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 3px;
+      gap: 3px;
+    }
+    .tab {
+      border: none;
+      background: transparent;
+      color: var(--muted-fg);
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 6px 11px;
+      border-radius: 7px;
+      cursor: pointer;
+    }
+    .tab.active {
+      background: var(--blue);
+      color: #061018;
+    }
+    .bars {
+      display: flex;
+      flex-direction: column;
+      gap: 11px;
+    }
+    .bar-row {
+      display: grid;
+      grid-template-columns: 165px 1fr 94px;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.85rem;
+    }
+    @media (max-width: 560px) {
+      .bar-row { grid-template-columns: 1fr 80px; }
+      .track { grid-column: 1 / -1; }
+    }
+    .bname { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+    .btag {
+      font-family: var(--mono);
+      font-size: 0.66rem;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(52, 232, 178, 0.14);
+      color: var(--mint);
+      border: 1px solid rgba(52, 232, 178, 0.35);
+    }
+    .track {
+      height: 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .fill {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.3s ease;
+    }
+    .bval {
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      text-align: right;
+    }
+    .callout {
+      margin-top: 14px;
+      padding: 11px 14px;
+      border-radius: 10px;
+      background: rgba(52, 232, 178, 0.08);
+      border: 1px solid rgba(52, 232, 178, 0.3);
+      font-size: 0.85rem;
+    }
+
+    /* Tech Pillars */
+    .pillars {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 11px;
+    }
+    .pillar {
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      padding: 15px;
+    }
+    .pnum {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--blue);
+      font-weight: 800;
+      margin-bottom: 5px;
+    }
+    .pillar h3 { margin: 0 0 6px; font-size: 0.95rem; }
+    .pillar p { margin: 0; font-size: 0.82rem; color: var(--muted-fg); }
+
+    /* Profiles */
+    .profiles {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(195px, 1fr));
+      gap: 11px;
+    }
+    .prof {
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      padding: 15px;
+    }
+    .prof.rec {
+      border-color: rgba(94, 129, 255, 0.6);
+    }
+    .prof-name {
+      font-weight: 800;
+      font-size: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .prof-kbps {
+      font-family: var(--mono);
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--mint);
+      margin: 6px 0;
+    }
+    .prof p { margin: 0; font-size: 0.8rem; color: var(--muted-fg); }
+
+    /* Bottom CTA */
+    .cta-box {
+      text-align: center;
+      padding: 28px 22px;
+      border-radius: var(--r);
+      border: 1px solid rgba(52, 232, 178, 0.38);
+      background:
+        radial-gradient(480px 200px at 50% 0%, rgba(94, 129, 255, 0.18), transparent 70%),
+        var(--surface);
+      margin-bottom: 14px;
+    }
+    .cta-box h2 { margin: 0 0 8px; font-size: 1.45rem; }
+    .cta-box p { margin: 0 auto 16px; max-width: 520px; color: var(--muted-fg); font-size: 0.9rem; }
+    .cmd {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      background: var(--code-background, #0a0d14);
+      border: 1px solid var(--line);
+      padding: 9px 14px;
+      border-radius: 8px;
+      color: #d7e5ff;
+    }
+
+    footer {
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 0.78rem;
+      color: var(--muted-fg);
+      padding: 4px 4px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="site">
+    <!-- Navigation -->
+    <nav class="nav">
+      <div class="logo">
+        <div class="logo-mark">.c</div>
+        <span>CALF Audio</span>
+      </div>
+      <div class="nav-links">
+        <a href="#why">Why .calf</a>
+        <a href="#calculator">Calculator</a>
+        <a href="#engine">Engine</a>
+        <a href="#profiles">Profiles</a>
+        <a href="#get" class="nav-cta">Get Desktop App</a>
+      </div>
+    </nav>
+
+    <!-- Hero -->
+    <header class="hero">
+      <div class="pill">Introducing CALF v1 · Compact Audio Listening Format</div>
+      <h1>MP3 is 33 years old.<br />Meet <span class="grad">.calf</span> — half the size, full fidelity.</h1>
+      <p>
+        We threw out 1993 audio compression and built <strong>Compact Audio Listening Format</strong> from first principles:
+        Vorbis-windowed MDCT, 24-band Bark psychoacoustics, Harmonic Bandwidth Extension, and a pure-Rust 32-bit rANS engine.
+      </p>
+      <div class="cta-row">
+        <a class="btn primary" href="#get">Download Desktop App</a>
+        <a class="btn" href="#calculator">Calculate Storage Savings</a>
+      </div>
+      <div class="hero-stats">
+        <div class="stat"><div class="big">-72.2%</div><div class="small">Smaller than 128k MP3 (Ultra)</div></div>
+        <div class="stat"><div class="big">-62.6%</div><div class="small">Smaller than 128k MP3 (Balanced)</div></div>
+        <div class="stat"><div class="big">29.4×</div><div class="small">Smaller than raw PCM WAV</div></div>
+        <div class="stat"><div class="big">~285×</div><div class="small">Faster than realtime encode</div></div>
+      </div>
+    </header>
+
+    <!-- Why .calf -->
+    <section class="sec" id="why">
+      <div class="sec-eyebrow">The Problem</div>
+      <h2>Why WAV and MP3 belong in a museum</h2>
+      <p class="sec-lead">Your music library shouldn't burn gigabytes on 1990s math.</p>
+      <div class="era-grid">
+        <div class="era">
+          <div class="era-yr">1991 · UNCOMPRESSED</div>
+          <h3>WAV (1411 kbps)</h3>
+          <ul>
+            <li>35 MB for a single 3.5-minute track</li>
+            <li>Zero psychoacoustic compression</li>
+            <li>Stores frequencies humans can't hear</li>
+          </ul>
+        </div>
+        <div class="era">
+          <div class="era-yr">1993 · LEGACY LOSSY</div>
+          <h3>MP3 (128–320 kbps)</h3>
+          <ul>
+            <li>Clumsy hybrid filterbank + pre-echo</li>
+            <li>Static 1993 Huffman tables waste bits</li>
+            <li>"Underwater birdies" at low bitrates</li>
+          </ul>
+        </div>
+        <div class="era winner">
+          <div class="era-yr">2026 · NEXT-GEN</div>
+          <h3>CALF (35–64 kbps)</h3>
+          <ul>
+            <li>24-band Bark masking + Intensity Stereo</li>
+            <li>Harmonic Bandwidth Extension for airy highs</li>
+            <li>32-bit rANS approaches Shannon entropy</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Interactive Savings Calculator -->
+    <section class="sec" id="calculator">
+      <div class="calc-head">
+        <div>
+          <div class="sec-eyebrow">Measured Benchmarks</div>
+          <h2>See how much space .calf saves</h2>
+        </div>
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-sec="210" type="button">1 Song</button>
+          <button class="tab" data-sec="3600" type="button">1 Album</button>
+          <button class="tab" data-sec="210000" type="button">1,000 Songs</button>
+          <button class="tab" data-sec="2100000" type="button">10k Library</button>
+        </div>
+      </div>
+      <div class="bars" id="bars"></div>
+      <div class="callout" id="callout"></div>
+    </section>
+
+    <!-- Engine Deep Dive -->
+    <section class="sec" id="engine">
+      <div class="sec-eyebrow">Under the Hood</div>
+      <h2>Five-stage psychoacoustic &amp; entropy pipeline</h2>
+      <p class="sec-lead">Compiled to a single zero-dependency Rust binary (<code style="font-family:var(--mono)">calf-codec</code>).</p>
+      <div class="pillars">
+        <div class="pillar">
+          <div class="pnum">01 · TRANSFORM</div>
+          <h3>Vorbis-Windowed Fast MDCT</h3>
+          <p>O(N log N) 2048-point MDCT with analytically exact Princen-Bradley TDAC (&lt;1e-5 error) and -18 dB/oct sidelobes.</p>
+        </div>
+        <div class="pillar">
+          <div class="pnum">02 · PERCEPTION</div>
+          <h3>24-Band Bark Masking</h3>
+          <p>Models human cochlear critical bands, Terhardt hearing thresholds, asymmetric spreading, and tonal vs. noise flatness.</p>
+        </div>
+        <div class="pillar">
+          <div class="pnum">03 · STEREO</div>
+          <h3>Joint M/S + Intensity Stereo</h3>
+          <p>Full Mid/Side stereo in lows/mids; switches to Mid + 5-bit pan angles above 2.8–6.4 kHz to halve stereo bit cost.</p>
+        </div>
+        <div class="pillar">
+          <div class="pnum">04 · HIGHS &amp; TEXTURE</div>
+          <h3>HBE + Perceptual Noise Fill</h3>
+          <p>Folds lower-octave harmonics into crisp 10.5–22 kHz highs and injects energy-matched noise to kill metallic artifacts.</p>
+        </div>
+        <div class="pillar">
+          <div class="pnum">05 · ENTROPY</div>
+          <h3>0.75 Companding + 32-bit rANS</h3>
+          <p>Dead-zone non-uniform quantization packed into 64-frame rANS superblocks with temporal delta-coded envelopes.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Quality Profiles -->
+    <section class="sec" id="profiles">
+      <div class="sec-eyebrow">Tuned Profiles</div>
+      <h2>Pick your footprint</h2>
+      <p class="sec-lead">Every profile encodes 10 seconds of 44.1 kHz stereo audio in ~35 milliseconds.</p>
+      <div class="profiles">
+        <div class="prof">
+          <div class="prof-name"><span>Ultra</span><span class="btag">-72% vs MP3</span></div>
+          <div class="prof-kbps">35.5 kbps</div>
+          <p>Maximum compression for huge mobile libraries, podcasts, and ultra-light offline listening.</p>
+        </div>
+        <div class="prof rec">
+          <div class="prof-name"><span>Balanced</span><span class="btag">Recommended</span></div>
+          <div class="prof-kbps">47.9 kbps</div>
+          <p>Less than half the size of 128k MP3 with rich stereo imaging and crisp high-frequency shimmer.</p>
+        </div>
+        <div class="prof">
+          <div class="prof-name"><span>Studio</span><span class="btag">-50% vs MP3</span></div>
+          <div class="prof-kbps">64.2 kbps</div>
+          <p>Extended stereo &amp; bandwidth cutoff for critical listening at a third the size of 192k MP3.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Desktop App CTA -->
+    <section class="cta-box" id="get">
+      <h2>Convert YouTube tracks to .calf in one click</h2>
+      <p>
+        Our ultra-lightweight native Linux desktop app lets you choose your output folder, convert YouTube audio straight to <strong>.calf</strong>, and play files back natively — no browser required.
+      </p>
+      <div class="cmd">Double-click "CALF Audio (.calf)" on your Desktop  ·  or run ./run.sh</div>
+    </section>
+
+    <footer>
+      <span>CALF — Compact Audio Listening Format (.calf v1)</span>
+      <span>Built in Pure Rust · Zero External Codec Dependencies</span>
+    </footer>
+  </div>
+
+  <script>
+    const FORMATS = [
+      { name: 'Raw WAV (PCM)', kbps: 1411.2, color: '#64748b', calf: false },
+      { name: 'MP3 @ 192 kbps', kbps: 192.0, color: '#f59e0b', calf: false },
+      { name: 'MP3 @ 128 kbps', kbps: 128.0, color: '#fb923c', calf: false },
+      { name: 'CALF Studio', kbps: 64.2, color: '#5e81ff', calf: true },
+      { name: 'CALF Balanced', kbps: 47.9, color: '#38bdf8', calf: true },
+      { name: 'CALF Ultra', kbps: 35.5, color: '#34e8b2', calf: true },
+    ];
+
+    function fmt(bytes) {
+      if (bytes >= 1024 ** 3) return (bytes / (1024 ** 3)).toFixed(2) + ' GB';
+      if (bytes >= 1024 ** 2) return (bytes / (1024 ** 2)).toFixed(2) + ' MB';
+      return (bytes / 1024).toFixed(0) + ' KB';
+    }
+
+    function render(sec) {
+      const bars = document.getElementById('bars');
+      bars.innerHTML = '';
+      FORMATS.forEach((f) => {
+        const bytes = (f.kbps * 1000 / 8) * sec;
+        const pct = Math.min(100, Math.max(4, (f.kbps / 240) * 100));
+        const row = document.createElement('div');
+        row.className = 'bar-row';
+        row.innerHTML = `
+          <div class="bname">${f.name} ${f.calf ? '<span class="btag">.calf</span>' : ''}</div>
+          <div class="track"><div class="fill" style="width:${pct.toFixed(1)}%;background:${f.color};"></div></div>
+          <div class="bval">${fmt(bytes)}</div>
+        `;
+        bars.appendChild(row);
+      });
+      const mp3 = (128000 / 8) * sec;
+      const bal = (47900 / 8) * sec;
+      const ult = (35500 / 8) * sec;
+      document.getElementById('callout').innerHTML =
+        `Choosing <strong>.calf</strong> over 128k MP3 saves <strong>${fmt(mp3 - bal)}</strong> on Balanced (<strong>-62.6%</strong>) or <strong>${fmt(mp3 - ult)}</strong> on Ultra (<strong>-72.2%</strong>).`;
+    }
+
+    document.querySelectorAll('.tab').forEach((t) => {
+      t.onclick = () => {
+        document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
+        t.classList.add('active');
+        render(Number(t.dataset.sec));
+      };
+    });
+    render(210);
+  </script>
+</body>
+</html>
