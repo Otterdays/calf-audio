@@ -119,14 +119,20 @@ impl MdctEngine {
         Self { m, n, window, fwd_pre, fwd_post, inv_pre, inv_post }
     }
 
-    /// Forward MDCT: 2M time samples -> M spectral coefficients.
+    /// Forward MDCT: 2M time samples -> M spectral coefficients (built-in Vorbis window).
     pub fn forward(&self, input: &[f32], out: &mut [f32]) {
+        self.forward_windowed(input, &self.window, out);
+    }
+
+    /// Forward MDCT with a caller-supplied analysis window (block-switching transitions).
+    pub fn forward_windowed(&self, input: &[f32], window: &[f64], out: &mut [f32]) {
         debug_assert_eq!(input.len(), self.n);
+        debug_assert_eq!(window.len(), self.n);
         debug_assert_eq!(out.len(), self.m);
 
         let mut buf = vec![Complex::new(0.0, 0.0); self.n];
         for i in 0..self.n {
-            let w_x = (input[i] as f64) * self.window[i];
+            let w_x = (input[i] as f64) * window[i];
             buf[i] = Complex::new(w_x * self.fwd_pre[i].re, w_x * self.fwd_pre[i].im);
         }
 
@@ -138,8 +144,13 @@ impl MdctEngine {
         }
     }
 
-    /// Inverse MDCT: M spectral coefficients -> 2M windowed time samples.
+    /// Inverse MDCT: M spectral coefficients -> 2M windowed time samples (built-in window).
     pub fn inverse(&self, spec: &[f32], out: &mut [f32]) {
+        self.inverse_windowed(spec, &self.window, out);
+    }
+
+    /// Inverse MDCT with a caller-supplied synthesis window.
+    pub fn inverse_windowed(&self, spec: &[f32], window: &[f64], out: &mut [f32]) {
         debug_assert_eq!(spec.len(), self.m);
         debug_assert_eq!(out.len(), self.n);
 
@@ -154,7 +165,7 @@ impl MdctEngine {
         let scale = 2.0 / (self.m as f64);
         for i in 0..self.n {
             let c = buf[i].mul(self.inv_post[i]);
-            out[i] = (c.re * scale * self.window[i]) as f32;
+            out[i] = (c.re * scale * window[i]) as f32;
         }
     }
 }

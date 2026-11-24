@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CALF (.calf) — Compact Audio Listening Format</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
   <style>
     :root {
       --fg: var(--foreground, #f1f5ff);
@@ -21,6 +22,7 @@
     }
 
     * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
 
     html, body {
       margin: 0;
@@ -158,12 +160,15 @@
       border: 1px solid var(--line);
       background: var(--surface-2);
       color: var(--fg);
+      transition: transform 0.14s ease, border-color 0.14s ease, opacity 0.14s ease;
     }
+    .btn:hover { transform: translateY(-1px); border-color: var(--blue); }
     .btn.primary {
       background: linear-gradient(135deg, var(--blue), var(--mint));
       color: #061018;
       border: none;
     }
+    .btn.primary:hover { opacity: 0.92; }
     .hero-stats {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
@@ -390,16 +395,37 @@
     }
     .cta-box h2 { margin: 0 0 8px; font-size: 1.45rem; }
     .cta-box p { margin: 0 auto 16px; max-width: 520px; color: var(--muted-fg); font-size: 0.9rem; }
-    .cmd {
-      display: inline-block;
-      font-family: var(--mono);
-      font-size: 0.82rem;
+    .cmd-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
       background: var(--code-background, #0a0d14);
       border: 1px solid var(--line);
-      padding: 9px 14px;
-      border-radius: 8px;
-      color: #d7e5ff;
+      padding: 7px 10px 7px 14px;
+      border-radius: 10px;
+      max-width: 100%;
     }
+    .cmd {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: #d7e5ff;
+      overflow-x: auto;
+    }
+    .copy-btn {
+      border: 1px solid var(--line);
+      background: var(--surface-2);
+      color: var(--fg);
+      font-family: var(--sans);
+      font-size: 0.74rem;
+      font-weight: 700;
+      padding: 5px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: border-color 0.14s ease, color 0.14s ease;
+    }
+    .copy-btn:hover { border-color: var(--mint); color: var(--mint); }
 
     footer {
       display: flex;
@@ -431,18 +457,19 @@
 
     <!-- Hero -->
     <header class="hero">
-      <div class="pill">Introducing CALF v1 · Compact Audio Listening Format</div>
+      <div class="pill">Introducing CALF v2 · Variable long/short block switching</div>
       <h1>MP3 is 33 years old.<br />Meet <span class="grad">.calf</span> — half the size, full fidelity.</h1>
       <p>
         We threw out 1993 audio compression and built <strong>Compact Audio Listening Format</strong> from first principles:
-        Vorbis-windowed MDCT, 24-band Bark psychoacoustics, Harmonic Bandwidth Extension, and a pure-Rust 32-bit rANS engine.
+        Vorbis-windowed MDCT with variable long/short block switching, 24-band Bark psychoacoustics, Harmonic Bandwidth Extension, and a pure-Rust 32-bit rANS engine.
       </p>
       <div class="cta-row">
-        <a class="btn primary" href="#get">Download Desktop App</a>
-        <a class="btn" href="#calculator">Calculate Storage Savings</a>
+        <a class="btn primary" href="#get">Get Desktop App</a>
+        <a class="btn" href="#calculator">Calculate Savings</a>
+        <a class="btn" href="https://github.com/Otterdays/calf-audio" target="_blank" rel="noopener">GitHub Repo</a>
       </div>
       <div class="hero-stats">
-        <div class="stat"><div class="big">-72.2%</div><div class="small">Smaller than 128k MP3 (Ultra)</div></div>
+        <div class="stat"><div class="big">-72.3%</div><div class="small">Smaller than 128k MP3 (Ultra)</div></div>
         <div class="stat"><div class="big">-62.6%</div><div class="small">Smaller than 128k MP3 (Balanced)</div></div>
         <div class="stat"><div class="big">29.4×</div><div class="small">Smaller than raw PCM WAV</div></div>
         <div class="stat"><div class="big">~285×</div><div class="small">Faster than realtime encode</div></div>
@@ -468,7 +495,7 @@
           <div class="era-yr">1993 · LEGACY LOSSY</div>
           <h3>MP3 (128–320 kbps)</h3>
           <ul>
-            <li>Clumsy hybrid filterbank + pre-echo</li>
+            <li>Fixed long blocks smear transients (pre-echo)</li>
             <li>Static 1993 Huffman tables waste bits</li>
             <li>"Underwater birdies" at low bitrates</li>
           </ul>
@@ -512,7 +539,7 @@
         <div class="pillar">
           <div class="pnum">01 · TRANSFORM</div>
           <h3>Vorbis-Windowed Fast MDCT</h3>
-          <p>O(N log N) 2048-point MDCT with analytically exact Princen-Bradley TDAC (&lt;1e-5 error) and -18 dB/oct sidelobes.</p>
+          <p>O(N log N) 2048/512-point MDCT with analytically exact Princen-Bradley TDAC (&lt;1e-5 error), -18 dB/oct sidelobes, and variable long/short block switching on transients.</p>
         </div>
         <div class="pillar">
           <div class="pnum">02 · PERCEPTION</div>
@@ -565,14 +592,20 @@
     <section class="cta-box" id="get">
       <h2>Convert YouTube tracks to .calf in one click</h2>
       <p>
-        Our ultra-lightweight native Linux desktop app lets you choose your output folder, convert YouTube audio straight to <strong>.calf</strong>, and play files back natively — no browser required.
+        Our ultra-lightweight desktop app lets you choose your output folder, convert YouTube audio straight to <strong>.calf</strong>, and play files back natively — no browser required.
       </p>
-      <div class="cmd">Double-click "CALF Audio (.calf)" on your Desktop  ·  or run ./run.sh</div>
+      <div class="cmd-wrap">
+        <code class="cmd" id="clone-cmd">git clone https://github.com/Otterdays/calf-audio.git &amp;&amp; cd calf-audio &amp;&amp; ./run.sh</code>
+        <button class="copy-btn" id="copy-btn" type="button">Copy</button>
+      </div>
+      <div style="margin-top:14px;">
+        <a class="btn primary" href="https://github.com/Otterdays/calf-audio" target="_blank" rel="noopener">View Setup Guide on GitHub</a>
+      </div>
     </section>
 
     <footer>
-      <span>CALF — Compact Audio Listening Format (.calf v1)</span>
-      <span>Built in Pure Rust · Zero External Codec Dependencies</span>
+      <span>CALF — Compact Audio Listening Format (.calf v2)</span>
+      <span>Built in Pure Rust · <a href="https://github.com/Otterdays/calf-audio" target="_blank" rel="noopener" style="color:var(--muted-fg);">Otterdays/calf-audio</a></span>
     </footer>
   </div>
 
@@ -611,7 +644,18 @@
       const bal = (47900 / 8) * sec;
       const ult = (35500 / 8) * sec;
       document.getElementById('callout').innerHTML =
-        `Choosing <strong>.calf</strong> over 128k MP3 saves <strong>${fmt(mp3 - bal)}</strong> on Balanced (<strong>-62.6%</strong>) or <strong>${fmt(mp3 - ult)}</strong> on Ultra (<strong>-72.2%</strong>).`;
+        `Choosing <strong>.calf</strong> over 128k MP3 saves <strong>${fmt(mp3 - bal)}</strong> on Balanced (<strong>-62.6%</strong>) or <strong>${fmt(mp3 - ult)}</strong> on Ultra (<strong>-72.3%</strong>).`;
+    }
+
+    const copyBtn = document.getElementById('copy-btn');
+    if (copyBtn) {
+      copyBtn.onclick = () => {
+        const text = document.getElementById('clone-cmd').textContent;
+        navigator.clipboard?.writeText(text).then(() => {
+          copyBtn.textContent = 'Copied!';
+          setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1600);
+        });
+      };
     }
 
     document.querySelectorAll('.tab').forEach((t) => {

@@ -88,7 +88,9 @@ impl PsychoModel {
     }
 
     /// Compute per-band masking threshold (total band noise power allowed) and tonality [0..1].
-    pub fn compute_masking(&self, spec: &[f32]) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
+    /// `transient`: spectrum is an interleaved set of short blocks; its spectral flatness
+    /// reflects temporal modulation rather than tonality, so treat every band as noise-like.
+    pub fn compute_masking(&self, spec: &[f32], transient: bool) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
         let nb = self.bands.len();
         let mut energies = vec![0.0f32; nb];
         let mut tonality = vec![0.0f32; nb];
@@ -108,7 +110,7 @@ impl PsychoModel {
             let sfm = (geom / arith).clamp(0.0, 1.0);
             // Tonality: 1.0 = pure tone, 0.0 = flat white noise
             let sfm_db = 10.0 * (sfm + 1e-9).log10();
-            tonality[b_idx] = (sfm_db / -30.0).clamp(0.0, 1.0);
+            tonality[b_idx] = if transient { 0.0 } else { (sfm_db / -30.0).clamp(0.0, 1.0) };
         }
 
         let mut mask_thresh = vec![0.0f32; nb];

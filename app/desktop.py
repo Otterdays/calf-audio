@@ -253,7 +253,7 @@ class CalfDesktopApp(tk.Tk):
         profile = self.profile_var.get()
         also_mp3 = self.also_mp3_var.get()
         self._set_busy(True)
-        self.set_status("Downloading audio via yt-dlp & compressing with CALF v1…", "#9ec5ff")
+        self.set_status("Downloading audio via yt-dlp & compressing with CALF v2…", "#9ec5ff")
 
         def worker():
             try:

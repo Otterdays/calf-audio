@@ -1,4 +1,3 @@
-use std::f32::consts::FRAC_PI_2;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
@@ -8,9 +7,32 @@ use crate::psycho::PsychoModel;
 use crate::rans::{rans_decode, rans_encode};
 use crate::wav::WavData;
 
-pub const CALF_MAGIC: &[u8; 4] = b"CALF";
 const HOP_SIZE: usize = 1024;
 const SUPERBLOCK_FRAMES: usize = 64;
+const SHORT_M: usize = 256;
+
+#[derive(Clone, Copy)]
+struct FrameDesc {
+    start: usize,
+    m: usize,
+    transient: bool,
+}
+
+pub(crate) fn transient_energy(padded: &[Vec<f32>], pos: usize, prev: &mut f32) -> bool {
+    let end = (pos + 2 * HOP_SIZE).min(padded[0].len());
+    let mut e = 0.0f32;
+    for ch in 0..padded.len() {
+        for i in pos..end {
+            let x = padded[ch][i];
+            e += x * x;
+        }
+    }
+    let n = (end - pos).max(1) as f32;
+    let cur = e / n;
+    let is = *prev > 0.0 && cur > *prev * 20.0;
+    *prev = cur;
+    is
+}
 
 /// Quality profiles targeting <= 50% of MP3 bitrate with high perceptual fidelity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -51,7 +73,7 @@ impl Profile {
     }
 
     /// Quantizer step multiplier (higher = more compression, lower = higher fidelity)
-    fn quant_scale(&self) -> f32 {
+    pub(crate) fn quant_scale(&self) -> f32 {
         match self {
             Profile::Ultra => 0.72,
             Profile::Balanced => 0.36,
@@ -60,7 +82,7 @@ impl Profile {
     }
 
     /// Frequency (Hz) above which Intensity Stereo (Mid + 5-bit Pan) replaces full Side coding
-    fn is_cutoff_hz(&self) -> f32 {
+    pub(crate) fn is_cutoff_hz(&self) -> f32 {
         match self {
             Profile::Ultra => 2800.0,
             Profile::Balanced => 3700.0,
@@ -69,7 +91,7 @@ impl Profile {
     }
 
     /// Frequency (Hz) above which Harmonic Bandwidth Extension (HBE) reconstructs highs
-    fn hbe_cutoff_hz(&self) -> f32 {
+    pub(crate) fn hbe_cutoff_hz(&self) -> f32 {
         match self {
             Profile::Ultra => 10500.0,
             Profile::Balanced => 13000.0,
@@ -78,7 +100,7 @@ impl Profile {
     }
 
     /// Dead-zone rounding bias (smaller = wider dead zone = sparser zeros)
-    fn deadzone_bias(&self) -> f32 {
+    pub(crate) fn deadzone_bias(&self) -> f32 {
         match self {
             Profile::Ultra => 0.34,
             Profile::Balanced => 0.38,
@@ -101,7 +123,7 @@ pub struct CalfInfo {
 }
 
 #[inline]
-fn step_from_idx(idx: u8) -> f32 {
+pub(crate) fn step_from_idx(idx: u8) -> f32 {
     if idx == 0 {
         0.0
     } else {
@@ -111,7 +133,7 @@ fn step_from_idx(idx: u8) -> f32 {
 }
 
 #[inline]
-fn idx_from_step(step: f32) -> u8 {
+pub(crate) fn idx_from_step(step: f32) -> u8 {
     if step <= 0.0 {
         return 0;
     }
@@ -120,7 +142,7 @@ fn idx_from_step(step: f32) -> u8 {
 }
 
 #[inline]
-fn energy_from_hbe_idx(idx: u8) -> f32 {
+pub(crate) fn energy_from_hbe_idx(idx: u8) -> f32 {
     if idx == 0 {
         0.0
     } else {
@@ -130,7 +152,7 @@ fn energy_from_hbe_idx(idx: u8) -> f32 {
 }
 
 #[inline]
-fn hbe_idx_from_rms(rms: f32) -> u8 {
+pub(crate) fn hbe_idx_from_rms(rms: f32) -> u8 {
     if rms < 1e-5 {
         return 0;
     }
@@ -140,7 +162,7 @@ fn hbe_idx_from_rms(rms: f32) -> u8 {
 
 /// Deterministic fast PRNG for Perceptual Noise Filling (PNF)
 #[inline]
-fn xorshift32(state: &mut u32) -> f32 {
+pub(crate) fn xorshift32(state: &mut u32) -> f32 {
     let mut x = *state;
     x ^= x << 13;
     x ^= x >> 17;
@@ -152,13 +174,13 @@ fn xorshift32(state: &mut u32) -> f32 {
 
 /// Pack signed delta into unsigned byte via zig-zag encoding
 #[inline]
-fn zigzag_enc(delta: i32) -> u8 {
+pub(crate) fn zigzag_enc(delta: i32) -> u8 {
     let z = ((delta << 1) ^ (delta >> 31)) as u32;
     z.min(255) as u8
 }
 
 #[inline]
-fn zigzag_dec(z: u8) -> i32 {
+pub(crate) fn zigzag_dec(z: u8) -> i32 {
     let v = z as u32;
     ((v >> 1) as i32) ^ -((v & 1) as i32)
 }
@@ -221,7 +243,7 @@ impl<'a> SignReader<'a> {
 
 /// Quantize a single band's MDCT coefficients using 0.75-power dead-zone companding.
 /// Returns (scale_idx, pnf_level, quantized_coeffs).
-fn quantize_band(
+pub(crate) fn quantize_band(
     spec: &[f32],
     mask_thresh: f32,
     tonality: f32,
@@ -294,7 +316,7 @@ fn quantize_band(
 
 /// Emit quantized coefficients into rANS magnitude stream (with zero-run tokens 0..=31),
 /// packed sign bits, and escape stream.
-fn emit_coeffs(q: &[i32], mag_stream: &mut Vec<u8>, signs: &mut SignWriter, escapes: &mut Vec<u8>) {
+pub(crate) fn emit_coeffs(q: &[i32], mag_stream: &mut Vec<u8>, signs: &mut SignWriter, escapes: &mut Vec<u8>) {
     let mut zrun = 0usize;
     for &v in q {
         if v == 0 {
@@ -324,7 +346,7 @@ fn emit_coeffs(q: &[i32], mag_stream: &mut Vec<u8>, signs: &mut SignWriter, esca
     }
 }
 
-fn read_coeffs(
+pub(crate) fn read_coeffs(
     n: usize,
     mag_stream: &[u8],
     mag_pos: &mut usize,
@@ -367,82 +389,122 @@ fn read_coeffs(
     Ok(())
 }
 
-/// Encode PCM WAV data into CALF v1 binary bytes.
+/// Encode PCM WAV data into CALF v2 binary bytes (variable long/short blocks).
 pub fn encode_calf(wav: &WavData, profile: Profile, title: &str) -> Result<Vec<u8>, String> {
     let channels = wav.channels as usize;
     let total_samples = wav.samples[0].len();
-    let mdct = MdctEngine::new(HOP_SIZE);
-    let psycho = PsychoModel::new(wav.sample_rate, HOP_SIZE);
+    let sample_rate = wav.sample_rate;
 
-    let nb = psycho.bands.len();
-    let is_start_band = psycho
-        .bands
-        .iter()
-        .position(|b| b.center_hz >= profile.is_cutoff_hz())
-        .unwrap_or(nb);
-    let hbe_start_band = psycho
-        .bands
-        .iter()
-        .position(|b| b.center_hz >= profile.hbe_cutoff_hz())
-        .unwrap_or(nb);
-    let pnf_start_band = psycho
-        .bands
-        .iter()
-        .position(|b| b.center_hz >= 1200.0)
-        .unwrap_or(nb);
-
-    // Pad input by HOP_SIZE zeros on the left and right for exact overlap-add TDAC
-    let num_frames = (total_samples + HOP_SIZE - 1) / HOP_SIZE + 1;
-    let padded_len = (num_frames + 1) * HOP_SIZE;
+    let num_long_slots = (total_samples + HOP_SIZE - 1) / HOP_SIZE + 1;
+    let padded_len = (num_long_slots + 1) * HOP_SIZE;
     let mut padded = vec![vec![0.0f32; padded_len]; channels];
     for ch in 0..channels {
         padded[ch][HOP_SIZE..HOP_SIZE + total_samples].copy_from_slice(&wav.samples[ch]);
     }
 
+    // First pass: transient detection + frame plan.
+    let mut prev_energy = 0.0f32;
+    let mut slot_transient = vec![false; num_long_slots];
+    let mut frames: Vec<FrameDesc> = Vec::new();
+    for slot in 0..num_long_slots {
+        let pos = slot * HOP_SIZE;
+        let tr = transient_energy(&padded, pos, &mut prev_energy);
+        slot_transient[slot] = tr;
+        if tr {
+            for k in 0..(HOP_SIZE / SHORT_M) {
+                frames.push(FrameDesc { start: pos + k * SHORT_M, m: SHORT_M, transient: true });
+            }
+        } else {
+            frames.push(FrameDesc { start: pos, m: HOP_SIZE, transient: false });
+        }
+    }
+    let total_frames = frames.len();
+
+    // Header
     let mut out = Vec::new();
-    // Write CALF header
-    out.extend_from_slice(CALF_MAGIC);
-    out.extend_from_slice(&wav.sample_rate.to_le_bytes());
+    out.extend_from_slice(b"CAL2");
+    out.extend_from_slice(&sample_rate.to_le_bytes());
     out.push(wav.channels as u8);
     out.push(profile as u8);
     out.extend_from_slice(&(HOP_SIZE as u16).to_le_bytes());
     out.extend_from_slice(&(total_samples as u64).to_le_bytes());
-    out.extend_from_slice(&(num_frames as u32).to_le_bytes());
+    out.extend_from_slice(&(total_frames as u32).to_le_bytes());
     let title_bytes = title.as_bytes();
     let tlen = title_bytes.len().min(65535) as u16;
     out.extend_from_slice(&tlen.to_le_bytes());
     out.extend_from_slice(&title_bytes[..tlen as usize]);
 
     let inv_sqrt2 = std::f32::consts::FRAC_1_SQRT_2;
+    let sqrt2 = std::f32::consts::SQRT_2;
 
-    // Process in superblocks of 64 frames (~1.48 s) for optimal adaptive rANS entropy coding
-    let mut frame_idx = 0usize;
-    while frame_idx < num_frames {
-        let sb_frames = (num_frames - frame_idx).min(SUPERBLOCK_FRAMES);
+    // Process in superblocks of 64 frames.
+    let mut frame_i = 0usize;
+    while frame_i < frames.len() {
+        let sb_frames = (frames.len() - frame_i).min(SUPERBLOCK_FRAMES);
 
         let mut meta_stream = Vec::new();
         let mut mag_stream = Vec::new();
         let mut sign_writer = SignWriter::new();
         let mut escape_stream = Vec::new();
 
-        // Previous frame scale/energy state for temporal delta coding
-        let mut prev_m_scale = vec![0i32; hbe_start_band];
-        let mut prev_s_scale = vec![0i32; is_start_band.min(hbe_start_band)];
-        let mut prev_hbe = vec![0i32; nb - hbe_start_band];
-        let mut prev_pan = vec![16i32; nb - is_start_band]; // 16 = center (0..31)
-
-        let mut spec_l = vec![0.0f32; HOP_SIZE];
-        let mut spec_r = vec![0.0f32; HOP_SIZE];
-        let mut spec_m = vec![0.0f32; HOP_SIZE];
-        let mut spec_s = vec![0.0f32; HOP_SIZE];
+        // Previous frame state for temporal delta coding (sized lazily per frame).
+        // We keep separate vectors sized to current frame's band counts.
+        let mut prev_m_scale: Vec<i32> = Vec::new();
+        let mut prev_s_scale: Vec<i32> = Vec::new();
+        let mut prev_hbe: Vec<i32> = Vec::new();
+        let mut prev_pan: Vec<i32> = Vec::new();
+        let mut have_prev = false;
 
         for _ in 0..sb_frames {
-            let start = frame_idx * HOP_SIZE;
-            mdct.forward(&padded[0][start..start + 2 * HOP_SIZE], &mut spec_l);
+            let fd = frames[frame_i];
+            frame_i += 1;
+            let m = fd.m;
+            let mdct = MdctEngine::new(m);
+            let psycho = PsychoModel::new(sample_rate, m);
+
+            let nb = psycho.bands.len();
+            let is_start_band = psycho
+                .bands
+                .iter()
+                .position(|b| b.center_hz >= profile.is_cutoff_hz())
+                .unwrap_or(nb);
+            let hbe_start_band = psycho
+                .bands
+                .iter()
+                .position(|b| b.center_hz >= profile.hbe_cutoff_hz())
+                .unwrap_or(nb);
+            let pnf_start_band = psycho
+                .bands
+                .iter()
+                .position(|b| b.center_hz >= 1200.0)
+                .unwrap_or(nb);
+
+            // Reset temporal state if band counts changed.
+            let side_n = is_start_band.min(hbe_start_band);
+            if !have_prev
+                || prev_m_scale.len() != hbe_start_band
+                || prev_s_scale.len() != side_n
+                || prev_hbe.len() != nb - hbe_start_band
+                || prev_pan.len() != nb - is_start_band
+            {
+                prev_m_scale = vec![0i32; hbe_start_band];
+                prev_s_scale = vec![0i32; side_n];
+                prev_hbe = vec![0i32; nb - hbe_start_band];
+                prev_pan = vec![16i32; nb - is_start_band];
+                have_prev = true;
+            }
+
+            let mut spec_l = vec![0.0f32; m];
+            let mut spec_r = vec![0.0f32; m];
+            let mut spec_m = vec![0.0f32; m];
+            let mut spec_s = vec![0.0f32; m];
+
+            let start = fd.start;
+            mdct.forward(&padded[0][start..start + 2 * m], &mut spec_l);
 
             if channels == 2 {
-                mdct.forward(&padded[1][start..start + 2 * HOP_SIZE], &mut spec_r);
-                for k in 0..HOP_SIZE {
+                mdct.forward(&padded[1][start..start + 2 * m], &mut spec_r);
+                for k in 0..m {
                     spec_m[k] = (spec_l[k] + spec_r[k]) * inv_sqrt2;
                     spec_s[k] = (spec_l[k] - spec_r[k]) * inv_sqrt2;
                 }
@@ -450,9 +512,11 @@ pub fn encode_calf(wav: &WavData, profile: Profile, title: &str) -> Result<Vec<u
                 spec_m.copy_from_slice(&spec_l);
             }
 
-            let (_m_e, m_mask, m_tonal) = psycho.compute_masking(&spec_m);
+            meta_stream.push(if fd.transient { 1u8 } else { 0u8 });
 
-            // 1. Mid channel (bands 0 .. hbe_start_band)
+            let (_m_e, m_mask, m_tonal) = psycho.compute_masking(&spec_m, fd.transient);
+
+            // Mid channel
             for b in 0..hbe_start_band {
                 let band = &psycho.bands[b];
                 let allow_pnf = b >= pnf_start_band;
@@ -473,14 +537,12 @@ pub fn encode_calf(wav: &WavData, profile: Profile, title: &str) -> Result<Vec<u
                 }
             }
 
-            // 2. Stereo coding (Side for low bands, Intensity Stereo pan for mid-high bands)
             if channels == 2 {
-                let (_s_e, s_mask, s_tonal) = psycho.compute_masking(&spec_s);
+                let (_s_e, s_mask, s_tonal) = psycho.compute_masking(&spec_s, fd.transient);
                 let side_end = is_start_band.min(hbe_start_band);
                 for b in 0..side_end {
                     let band = &psycho.bands[b];
                     let allow_pnf = b >= pnf_start_band;
-                    // Joint masking: loud Mid partially masks Side channel too!
                     let joint_mask = s_mask[b].max(m_mask[b] * 0.5);
                     let (scale_idx, pnf, q) = quantize_band(
                         &spec_s[band.start_bin..band.end_bin],
@@ -499,7 +561,6 @@ pub fn encode_calf(wav: &WavData, profile: Profile, title: &str) -> Result<Vec<u
                     }
                 }
 
-                // Intensity Stereo pan angle (0..31) for bands is_start_band .. nb
                 for b in is_start_band..nb {
                     let band = &psycho.bands[b];
                     let mut el = 0.0f32;
@@ -511,8 +572,8 @@ pub fn encode_calf(wav: &WavData, profile: Profile, title: &str) -> Result<Vec<u
                     let pan_idx = if el + er < 1e-10 {
                         16i32
                     } else {
-                        let angle = er.sqrt().atan2(el.sqrt()); // [0, pi/2]
-                        ((angle / FRAC_PI_2) * 31.0).round().clamp(0.0, 31.0) as i32
+                        let angle = er.sqrt().atan2(el.sqrt());
+                        ((angle / std::f32::consts::FRAC_PI_2) * 31.0).round().clamp(0.0, 31.0) as i32
                     };
                     let pi = b - is_start_band;
                     meta_stream.push(zigzag_enc(pan_idx - prev_pan[pi]));
@@ -520,7 +581,6 @@ pub fn encode_calf(wav: &WavData, profile: Profile, title: &str) -> Result<Vec<u
                 }
             }
 
-            // 3. Harmonic Bandwidth Extension (HBE) energies for high bands
             for b in hbe_start_band..nb {
                 let band = &psycho.bands[b];
                 let n = (band.end_bin - band.start_bin).max(1) as f32;
@@ -534,11 +594,8 @@ pub fn encode_calf(wav: &WavData, profile: Profile, title: &str) -> Result<Vec<u
                 meta_stream.push(zigzag_enc(h_idx - prev_hbe[hi]));
                 prev_hbe[hi] = h_idx;
             }
-
-            frame_idx += 1;
         }
 
-        // Entropy-encode the superblock streams with custom 32-bit rANS
         let meta_enc = rans_encode(&meta_stream);
         let mag_enc = rans_encode(&mag_stream);
         let sign_bytes = sign_writer.finish();
@@ -553,12 +610,13 @@ pub fn encode_calf(wav: &WavData, profile: Profile, title: &str) -> Result<Vec<u
         out.extend_from_slice(&escape_stream);
     }
 
+    let _ = sqrt2;
     Ok(out)
 }
 
 pub fn read_calf_info(data: &[u8]) -> Result<CalfInfo, String> {
-    if data.len() < 24 || &data[0..4] != CALF_MAGIC {
-        return Err("Not a valid CALF file".into());
+    if data.len() < 24 || &data[0..4] != b"CAL2" {
+        return Err("Not a valid CALF v2 file".into());
     }
     let sample_rate = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
     let channels = data[8];
@@ -596,43 +654,27 @@ pub fn read_calf_info(data: &[u8]) -> Result<CalfInfo, String> {
     })
 }
 
-/// Decode CALF v1 binary bytes back into PCM WavData.
+/// Decode CALF v2 binary bytes back into PCM WavData.
 pub fn decode_calf(data: &[u8]) -> Result<WavData, String> {
     let info = read_calf_info(data)?;
     let channels = info.channels as usize;
     let total_samples = info.total_samples as usize;
     let num_frames = info.num_frames as usize;
     let profile = info.profile;
+    let sample_rate = info.sample_rate;
 
     let tlen = u16::from_le_bytes([data[24], data[25]]) as usize;
     let mut pos = 26 + tlen;
-
-    let mdct = MdctEngine::new(HOP_SIZE);
-    let psycho = PsychoModel::new(info.sample_rate, HOP_SIZE);
-    let nb = psycho.bands.len();
-    let is_start_band = psycho
-        .bands
-        .iter()
-        .position(|b| b.center_hz >= profile.is_cutoff_hz())
-        .unwrap_or(nb);
-    let hbe_start_band = psycho
-        .bands
-        .iter()
-        .position(|b| b.center_hz >= profile.hbe_cutoff_hz())
-        .unwrap_or(nb);
-    let pnf_start_band = psycho
-        .bands
-        .iter()
-        .position(|b| b.center_hz >= 1200.0)
-        .unwrap_or(nb);
-
-    let padded_len = (num_frames + 1) * HOP_SIZE;
-    let mut out_padded = vec![vec![0.0f32; padded_len]; channels];
 
     let inv_sqrt2 = std::f32::consts::FRAC_1_SQRT_2;
     let sqrt2 = std::f32::consts::SQRT_2;
     let mut rng_state: u32 = 0x51A7_C0DE;
 
+    // Over-allocate; trim later.
+    let padded_len = num_frames * 1024 + 2048;
+    let mut out_padded = vec![vec![0.0f32; padded_len]; channels];
+
+    let mut frame_start = 0usize;
     let mut frame_idx = 0usize;
     while frame_idx < num_frames {
         let sb_frames = (num_frames - frame_idx).min(SUPERBLOCK_FRAMES);
@@ -666,24 +708,60 @@ pub fn decode_calf(data: &[u8]) -> Result<WavData, String> {
         let mut sign_reader = SignReader::new(sign_bytes);
         let mut esc_pos = 0usize;
 
-        let mut prev_m_scale = vec![0i32; hbe_start_band];
-        let mut prev_s_scale = vec![0i32; is_start_band.min(hbe_start_band)];
-        let mut prev_hbe = vec![0i32; nb - hbe_start_band];
-        let mut prev_pan = vec![16i32; nb - is_start_band];
-
-        let mut spec_m = vec![0.0f32; HOP_SIZE];
-        let mut spec_s = vec![0.0f32; HOP_SIZE];
-        let mut spec_l = vec![0.0f32; HOP_SIZE];
-        let mut spec_r = vec![0.0f32; HOP_SIZE];
-        let mut time_block = vec![0.0f32; 2 * HOP_SIZE];
-        let mut q_buf = vec![0i32; HOP_SIZE];
-        let mut pan_angles = vec![16i32; nb - is_start_band];
+        let mut prev_m_scale: Vec<i32> = Vec::new();
+        let mut prev_s_scale: Vec<i32> = Vec::new();
+        let mut prev_hbe: Vec<i32> = Vec::new();
+        let mut prev_pan: Vec<i32> = Vec::new();
 
         for _ in 0..sb_frames {
+            let bt = *meta_stream.get(meta_pos).ok_or("EOF meta block type")?;
+            meta_pos += 1;
+            let short = bt != 0;
+            let m = if short { SHORT_M } else { HOP_SIZE };
+
+            let mdct = MdctEngine::new(m);
+            let psycho = PsychoModel::new(sample_rate, m);
+            let nb = psycho.bands.len();
+            let is_start_band = psycho
+                .bands
+                .iter()
+                .position(|b| b.center_hz >= profile.is_cutoff_hz())
+                .unwrap_or(nb);
+            let hbe_start_band = psycho
+                .bands
+                .iter()
+                .position(|b| b.center_hz >= profile.hbe_cutoff_hz())
+                .unwrap_or(nb);
+            let pnf_start_band = psycho
+                .bands
+                .iter()
+                .position(|b| b.center_hz >= 1200.0)
+                .unwrap_or(nb);
+
+            let mut spec_m = vec![0.0f32; m];
+            let mut spec_s = vec![0.0f32; m];
+            let mut spec_l = vec![0.0f32; m];
+            let mut spec_r = vec![0.0f32; m];
+            let mut time_block = vec![0.0f32; 2 * m];
+            let mut q_buf = vec![0i32; m];
+            let mut pan_angles = vec![16i32; nb - is_start_band];
+
+            let side_n = is_start_band.min(hbe_start_band);
+            if prev_m_scale.len() != hbe_start_band
+                || prev_s_scale.len() != side_n
+                || prev_hbe.len() != nb - hbe_start_band
+                || prev_pan.len() != nb - is_start_band
+            {
+                prev_m_scale = vec![0i32; hbe_start_band];
+                prev_s_scale = vec![0i32; side_n];
+                prev_hbe = vec![0i32; nb - hbe_start_band];
+                prev_pan = vec![16i32; nb - is_start_band];
+            }
+
             spec_m.fill(0.0);
             spec_s.fill(0.0);
 
-            // 1. Decode Mid bands
+            // Mid
             for b in 0..hbe_start_band {
                 let band = &psycho.bands[b];
                 let allow_pnf = b >= pnf_start_band;
@@ -716,7 +794,6 @@ pub fn decode_calf(data: &[u8]) -> Result<WavData, String> {
                 }
             }
 
-            // 2. Decode Stereo (Side + Intensity Stereo pan)
             if channels == 2 {
                 let side_end = is_start_band.min(hbe_start_band);
                 for b in 0..side_end {
@@ -761,7 +838,6 @@ pub fn decode_calf(data: &[u8]) -> Result<WavData, String> {
                 }
             }
 
-            // 3. Reconstruct Harmonic Bandwidth Extension (HBE) bands by spectral folding + envelope shaping
             let src_start = if hbe_start_band > 0 {
                 psycho.bands[hbe_start_band - 1].start_bin / 2
             } else {
@@ -770,7 +846,7 @@ pub fn decode_calf(data: &[u8]) -> Result<WavData, String> {
             let src_end = if hbe_start_band < nb {
                 psycho.bands[hbe_start_band].start_bin.max(src_start + 32)
             } else {
-                HOP_SIZE
+                m
             };
             let src_len = (src_end - src_start).max(1);
 
@@ -784,7 +860,6 @@ pub fn decode_calf(data: &[u8]) -> Result<WavData, String> {
 
                 let target_rms = energy_from_hbe_idx(h_idx);
                 if target_rms > 0.0 {
-                    // Fold lower-octave spectral structure + 35% decorrelated sparkle noise
                     let n = band.end_bin - band.start_bin;
                     let mut raw_e = 0.0f32;
                     for j in 0..n {
@@ -803,8 +878,7 @@ pub fn decode_calf(data: &[u8]) -> Result<WavData, String> {
                 }
             }
 
-            // 4. Reconstruct L/R spectra and run Inverse MDCT + Overlap-Add
-            let start = frame_idx * HOP_SIZE;
+            let start = frame_start;
             if channels == 2 {
                 let side_end = is_start_band.min(hbe_start_band);
                 for b in 0..side_end {
@@ -816,7 +890,7 @@ pub fn decode_calf(data: &[u8]) -> Result<WavData, String> {
                 }
                 for b in is_start_band..nb {
                     let band = &psycho.bands[b];
-                    let angle = (pan_angles[b - is_start_band] as f32 / 31.0) * FRAC_PI_2;
+                    let angle = (pan_angles[b - is_start_band] as f32 / 31.0) * std::f32::consts::FRAC_PI_2;
                     let gl = angle.cos() * sqrt2;
                     let gr = angle.sin() * sqrt2;
                     for k in band.start_bin..band.end_bin {
@@ -826,25 +900,32 @@ pub fn decode_calf(data: &[u8]) -> Result<WavData, String> {
                 }
 
                 mdct.inverse(&spec_l, &mut time_block);
-                for i in 0..2 * HOP_SIZE {
-                    out_padded[0][start + i] += time_block[i];
+                for i in 0..2 * m {
+                    if start + i < out_padded[0].len() {
+                        out_padded[0][start + i] += time_block[i];
+                    }
                 }
                 mdct.inverse(&spec_r, &mut time_block);
-                for i in 0..2 * HOP_SIZE {
-                    out_padded[1][start + i] += time_block[i];
+                for i in 0..2 * m {
+                    if start + i < out_padded[1].len() {
+                        out_padded[1][start + i] += time_block[i];
+                    }
                 }
             } else {
                 mdct.inverse(&spec_m, &mut time_block);
-                for i in 0..2 * HOP_SIZE {
-                    out_padded[0][start + i] += time_block[i];
+                for i in 0..2 * m {
+                    if start + i < out_padded[0].len() {
+                        out_padded[0][start + i] += time_block[i];
+                    }
                 }
             }
 
+            frame_start += m;
             frame_idx += 1;
         }
     }
 
-    // Trim the leading HOP_SIZE padding and trailing pad to exact sample count
+    // Trim
     let mut samples = Vec::with_capacity(channels);
     for ch in 0..channels {
         let end = (HOP_SIZE + total_samples).min(out_padded[ch].len());
@@ -852,7 +933,7 @@ pub fn decode_calf(data: &[u8]) -> Result<WavData, String> {
     }
 
     Ok(WavData {
-        sample_rate: info.sample_rate,
+        sample_rate,
         channels: info.channels as u16,
         samples,
     })
@@ -869,4 +950,28 @@ pub fn read_bytes<P: AsRef<Path>>(path: P) -> Result<Vec<u8>, String> {
     let mut buf = Vec::new();
     f.read_to_end(&mut buf).map_err(|e| format!("Failed reading file: {e}"))?;
     Ok(buf)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn roundtrip_v2() {
+        let sr = 44100usize;
+        let n = sr;
+        let mut l = vec![0.0f32; n];
+        let mut r = vec![0.0f32; n];
+        for i in 0..n {
+            let t = i as f32 / sr as f32;
+            l[i] = 0.5 * (2.0 * std::f32::consts::PI * 440.0 * t).sin();
+            r[i] = 0.5 * (2.0 * std::f32::consts::PI * 660.0 * t).sin();
+        }
+        let wav = WavData { sample_rate: 44100, channels: 2, samples: vec![l, r] };
+        let enc = encode_calf(&wav, Profile::Balanced, "roundtrip").unwrap();
+        let dec = decode_calf(&enc).unwrap();
+        assert_eq!(dec.sample_rate, 44100);
+        assert_eq!(dec.channels, 2);
+        assert_eq!(dec.samples[0].len(), n);
+    }
 }

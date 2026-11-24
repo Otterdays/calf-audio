@@ -227,7 +227,7 @@
   <div class="wrap">
     <header>
       <div>
-        <h1>Compact Audio Listening Format <span class="badge">.CALF v1</span></h1>
+        <h1>Compact Audio Listening Format <span class="badge">.CALF v2</span></h1>
         <div class="sub">Psychoacoustic MDCT + Intensity Stereo + Harmonic Bandwidth Extension + 32-bit rANS</div>
       </div>
       <a href="/about" style="color:var(--accent-2); font-size:0.84rem; font-weight:600; text-decoration:none; white-space:nowrap;">About .CALF →</a>
@@ -425,7 +425,7 @@
       $('convertBtn').disabled = true;
       $('demoBtn').disabled = true;
       $('metrics').style.display = 'none';
-      setStatus('info', 'Downloading audio via yt-dlp, decoding PCM, and compressing with CALF v1...');
+      setStatus('info', 'Downloading audio via yt-dlp, decoding PCM, and compressing with CALF v2...');
       try {
         const res = await fetch('/api/convert', {
           method: 'POST',
@@ -457,7 +457,7 @@
 
     $('demoBtn').onclick = async () => {
       $('demoBtn').disabled = true;
-      setStatus('info', 'Generating 8s stereo musical test signal and encoding with CALF v1...');
+      setStatus('info', 'Generating 8s stereo musical test signal and encoding with CALF v2...');
       try {
         const res = await fetch('/api/demo', {
           method: 'POST',
